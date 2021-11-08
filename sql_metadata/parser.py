@@ -503,6 +503,7 @@ class Parser:  # pylint: disable=R0902
             return self._subqueries
         subqueries = {}
         token = self.tokens[0]
+        anon_count = 0
         while token.next_token:
             if token.previous_token.is_subquery_start:
                 current_subquery = []
@@ -517,7 +518,11 @@ class Parser:  # pylint: disable=R0902
                 if inner_token.next_token.value in self.subqueries_names:
                     query_name = inner_token.next_token.value
                 else:
-                    query_name = inner_token.next_token.next_token.value
+                    try:
+                        query_name = inner_token.next_token.next_token.value
+                    except:
+                        query_name = f"anon_{anon_count}"
+                        anon_count += 1
                 subquery_text = "".join([x.stringified_token for x in current_subquery])
                 subqueries[query_name] = subquery_text
 
