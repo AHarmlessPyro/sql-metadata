@@ -124,11 +124,14 @@ class Parser:  # pylint: disable=R0902
 
     @property
     def tokens(self) -> List[SQLToken]:
+        if self._tokens is not None:
+            return self._tokens
+        return self.__tokens__()
+
+    def __tokens__(self, separators=["."]) -> List[SQLToken]:
         """
         Tokenizes the query
         """
-        if self._tokens is not None:
-            return self._tokens
 
         parsed = sqlparse.parse(self._query)
         tokens = []
@@ -140,7 +143,9 @@ class Parser:  # pylint: disable=R0902
         combine_flag = False
         for index, tok in enumerate(self.non_empty_tokens):
             # combine dot separated identifiers
-            if self._is_token_part_of_complex_identifier(token=tok, index=index):
+            if self._is_token_part_of_complex_identifier(
+                token=tok, index=index, separators=separators
+            ):
                 combine_flag = True
                 continue
             token = SQLToken(
@@ -188,7 +193,7 @@ class Parser:  # pylint: disable=R0902
             return self._columns
         columns = UniqueList()
 
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if token.is_name or token.is_keyword_column_name:
                 if token.is_column_definition_inside_create_table(
                     query_type=self.query_type
@@ -319,7 +324,7 @@ class Parser:  # pylint: disable=R0902
         column_aliases_names = UniqueList()
         with_names = self.with_names
         subqueries_names = self.subqueries_names
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if token.is_potential_alias:
                 if token.value in column_aliases_names:
                     self._handle_column_alias_subquery_level_update(token=token)
@@ -338,12 +343,10 @@ class Parser:  # pylint: disable=R0902
         """
         Return the list of tables this query refers to
         """
-        if self._tables is not None:
-            return self._tables
         tables = UniqueList()
         with_names = self.with_names
 
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens(separators=[".", "-"]):
             if token.is_potential_table_name:
                 if (
                     token.is_alias_of_table_or_alias_of_subquery
@@ -373,7 +376,7 @@ class Parser:  # pylint: disable=R0902
         limit = None
         offset = None
 
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if token.is_integer:
                 if token.last_keyword_normalized == "LIMIT" and not limit:
                     # LIMIT <limit>
@@ -405,7 +408,7 @@ class Parser:  # pylint: disable=R0902
         aliases = {}
         tables = self.tables
 
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if (
                 token.last_keyword_normalized in TABLE_ADJUSTMENT_KEYWORDS
                 and token.is_name
@@ -438,7 +441,7 @@ class Parser:  # pylint: disable=R0902
         if self._with_names is not None:
             return self._with_names
         with_names = UniqueList()
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if token.previous_token.normalized == "WITH":
                 self._is_in_with_block = True
                 while self._is_in_with_block and token.next_token:
@@ -522,7 +525,6 @@ class Parser:  # pylint: disable=R0902
                         query_name = inner_token.next_token.next_token.value
                     except:
                         query_name = f"anon_{anon_count}"
-                        anon_count += 1
                 subquery_text = "".join([x.stringified_token for x in current_subquery])
                 subqueries[query_name] = subquery_text
 
@@ -564,7 +566,7 @@ class Parser:  # pylint: disable=R0902
         if self._values:
             return self._values
         values = []
-        for token in self._not_parsed_tokens:
+        for token in self._not_parsed_tokens():
             if (
                 token.last_keyword_normalized == "VALUES"
                 and token.is_in_parenthesis
@@ -620,12 +622,13 @@ class Parser:  # pylint: disable=R0902
         """
         return Generalizator(self._raw_query).generalize
 
-    @property
-    def _not_parsed_tokens(self):
+    def _not_parsed_tokens(self, separators=["."]):
         """
         Returns only tokens that have no type assigned yet
         """
-        return [x for x in self.tokens if x.token_type is None]
+        return [
+            x for x in self.__tokens__(separators=separators) if x.token_type is None
+        ]
 
     def _handle_column_save(self, token: SQLToken, columns: List[str]):
         column = token.table_prefixed_column(self.tables_aliases)
@@ -968,16 +971,17 @@ class Parser:  # pylint: disable=R0902
         return last_keyword
 
     def _is_token_part_of_complex_identifier(
-        self, token: sqlparse.tokens.Token, index: int
+        self, token: sqlparse.tokens.Token, index: int, separators=["."]
     ) -> bool:
         """
         Checks if token is a part of complex identifier like
         <schema>.<table>.<column> or <table/sub_query>.<column>
         """
-        return str(token) == "." or (
-            index + 1 < self.tokens_length
-            and str(self.non_empty_tokens[index + 1]) == "."
+        condA = str(token) in separators
+        condB = index + 1 < self.tokens_length and (
+            str(self.non_empty_tokens[index + 1]) in separators
         )
+        return condA or condB
 
     def _combine_qualified_names(self, index: int, token: SQLToken) -> None:
         """
@@ -994,9 +998,10 @@ class Parser:  # pylint: disable=R0902
         """
         Checks if complex identifier is longer and follows back until it's finished
         """
-        if index > 1 and str(self.non_empty_tokens[index - 1]) == ".":
+        if index > 1 and str(self.non_empty_tokens[index - 1]) in [".", "-"]:
             prev_value = self.non_empty_tokens[index - 2].value.strip("`").strip('"')
-            value = f"{prev_value}.{value}"
+            separator = self.non_empty_tokens[index - 1]
+            value = f"{prev_value}{separator}{value}"
             return value, True
         return value, False
 
