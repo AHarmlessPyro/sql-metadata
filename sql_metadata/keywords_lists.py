@@ -6,7 +6,15 @@ checks for tables an columns
 # these keywords are followed by columns reference
 from enum import Enum
 
-KEYWORDS_BEFORE_COLUMNS = {"SELECT", "WHERE", "ORDERBY", "GROUPBY", "ON", "SET"}
+KEYWORDS_BEFORE_COLUMNS = {
+    "SELECT",
+    "WHERE",
+    "ORDERBY",
+    "GROUPBY",
+    "ON",
+    "SET",
+    "USING",
+}
 
 # normalized list of table preceding keywords
 TABLE_ADJUSTMENT_KEYWORDS = {
@@ -47,6 +55,7 @@ COLUMNS_SECTIONS = {
     "WHERE": "where",
     "ORDERBY": "order_by",
     "ON": "join",
+    "USING": "join",
     "INTO": "insert",
     "SET": "update",
     "GROUPBY": "group_by",
@@ -61,6 +70,7 @@ class QueryType(str, Enum):
     INSERT = "INSERT"
     REPLACE = "REPLACE"
     UPDATE = "UPDATE"
+    DELETE = "DELETE"
     SELECT = "SELECT"
     CREATE = "CREATE TABLE"
     ALTER = "ALTER TABLE"
@@ -86,6 +96,7 @@ SUPPORTED_QUERY_TYPES = {
     "REPLACE": QueryType.REPLACE,
     "UPDATE": QueryType.UPDATE,
     "SELECT": QueryType.SELECT,
+    "DELETE": QueryType.DELETE,
     "WITH": QueryType.SELECT,
     "CREATETABLE": QueryType.CREATE,
     "ALTERTABLE": QueryType.ALTER,
